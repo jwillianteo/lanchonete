@@ -1,0 +1,17 @@
+[
+    {
+        "id": 1,
+        "cliente": "willi",
+        "itens": [
+            {
+                "id": 1,
+                "nome": "batata",
+                "quantidade": 2,
+                "valor_unitario": 5.0,
+                "subtotal": 10.0
+            }
+        ],
+        "total": 10.0,
+        "data": "2025-02-10 22:52:14"
+    }
+]

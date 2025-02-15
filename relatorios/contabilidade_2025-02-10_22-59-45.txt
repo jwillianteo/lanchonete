@@ -1,0 +1,13 @@
+--- Relatório de Contabilidade ---
+Data e Hora: 2025-02-10 22:59:45
+
+Total de Vendas: R$ 10.00
+Lucro Total: R$ 4.00
+------------------------------
+
+--- Detalhes das Vendas ---
+Cliente: willi
+Total da Venda: R$ 10.00
+Itens:
+  - 2x batata (R$ 5.00 cada)
+------------------------------

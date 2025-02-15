@@ -1,0 +1,298 @@
+/* Reset básico */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    padding: 20px;
+}
+/* Estilo para o cabeçalho */
+.header {
+    display: flex;
+    justify-content: space-between; /* Alinha o título à esquerda e o logo à direita */
+    align-items: center; /* Centraliza verticalmente */
+    margin-bottom: 20px; /* Espaçamento abaixo do cabeçalho */
+}
+
+/* Estilo para o contêiner do logo */
+.logo-container {
+    width: 100px; /* Ajuste o tamanho conforme necessário */
+    height: auto;
+}
+
+/* Estilo para o logo */
+.logo {
+    width: 100%; /* Faz o logo ocupar 100% do contêiner */
+    height: auto; /* Mantém a proporção da imagem */
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+/* Container principal */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Mensagens de flash */
+.alert {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* Formulário */
+.form-label {
+    font-weight: bold;
+    color: #333;
+}
+
+.form-control {
+    margin-bottom: 15px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    padding: 10px;
+    font-size: 16px;
+}
+
+.form-control:focus {
+    border-color: #4169E1;
+    box-shadow: 0 0 5px rgba(65, 105, 225, 0.5);
+}
+
+/* Botões */
+.btn {
+    padding: 12px 24px; /* Aumentado em 10% */
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.btn-primary {
+    background-color: #4169E1; /* Azul Royal */
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #1E90FF; /* Azul mais claro no hover */
+    transform: translateY(-2px); /* Efeito de levantar */
+}
+
+.btn-secondary {
+    background-color: #6c757d; /* Cinza */
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268; /* Cinza mais escuro no hover */
+    transform: translateY(-2px); /* Efeito de levantar */
+}
+
+.btn-success {
+    background-color: #28a745; /* Verde */
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #218838; /* Verde mais escuro no hover */
+    transform: translateY(-2px); /* Efeito de levantar */
+}
+
+.btn-warning {
+    background-color: #ffc107; /* Amarelo */
+    color: black;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800; /* Amarelo mais escuro no hover */
+    transform: translateY(-2px); /* Efeito de levantar */
+}
+
+/* Animação para o botão Cadastrar */
+.btn-primary {
+    animation: pulse 1.5s infinite; /* Animação de pulsar */
+}
+
+.btn-primary:hover {
+    animation: none; /* Para a animação no hover */
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+
+    .btn {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .form-control {
+        font-size: 14px;
+    }
+}/* Reset básico */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+/* Container principal */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Mensagens de flash */
+.alert {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* Formulário */
+.form-label {
+    font-weight: bold;
+    color: #333;
+}
+
+.form-control {
+    margin-bottom: 15px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    padding: 10px;
+    font-size: 16px;
+}
+
+.form-control:focus {
+    border-color: #4169E1;
+    box-shadow: 0 0 5px rgba(65, 105, 225, 0.5);
+}
+
+/* Botões */
+.btn {
+    padding: 12px 24px; /* Aumentado em 10% */
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.btn-primary {
+    background-color: #4169E1; /* Azul Royal */
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #1E90FF; /* Azul mais claro no hover */
+    transform: translateY(-2px); /* Efeito de levantar */
+}
+
+.btn-secondary {
+    background-color: #6c757d; /* Cinza */
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268; /* Cinza mais escuro no hover */
+    transform: translateY(-2px); /* Efeito de levantar */
+}
+
+.btn-success {
+    background-color: #28a745; /* Verde */
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #218838; /* Verde mais escuro no hover */
+    transform: translateY(-2px); /* Efeito de levantar */
+}
+
+.btn-warning {
+    background-color: #ffc107; /* Amarelo */
+    color: black;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800; /* Amarelo mais escuro no hover */
+    transform: translateY(-2px); /* Efeito de levantar */
+}
+
+/* Animação para o botão Cadastrar */
+.btn-primary {
+    animation: pulse 1.5s infinite; /* Animação de pulsar */
+}
+
+.btn-primary:hover {
+    animation: none; /* Para a animação no hover */
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+
+    .btn {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .form-control {
+        font-size: 14px;
+    }
+}

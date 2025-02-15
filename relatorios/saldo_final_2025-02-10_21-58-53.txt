@@ -1,0 +1,11 @@
+--- Relatório de Saldo Final ---
+Data e Hora: 2025-02-10 21:58:53
+
+Produto: batata
+Quantidade: 10
+Valor de Venda: R$ 5.00
+------------------------------
+Produto: batata
+Quantidade: 10
+Valor de Venda: R$ 7.00
+------------------------------
