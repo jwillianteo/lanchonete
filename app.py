@@ -102,6 +102,81 @@ def registrar_venda(cliente, itens_vendidos):
         print(f"Erro ao registrar venda: {str(e)}")
         raise e
 
+# Função para gerar o relatório de estoque
+def gerar_relatorio_estoque():
+    db = get_db()
+    try:
+        # Consulta para obter o estoque anterior (antes das vendas do dia)
+        hoje = datetime.now().strftime('%Y-%m-%d')
+        cursor = db.execute(
+            """
+            SELECT 
+                p.id,
+                p.nome,
+                p.quantidade AS estoque_atual,
+                (p.quantidade + IFNULL(SUM(iv.quantidade), 0)) AS estoque_anterior
+            FROM produtos p
+            LEFT JOIN itens_venda iv ON p.id = iv.produto_id
+            LEFT JOIN vendas v ON iv.venda_id = v.id AND DATE(v.data_venda) = ?
+            GROUP BY p.id
+            """,
+            (hoje,)
+        )
+        dados = cursor.fetchall()
+        
+        # Transformar os dados em uma lista de dicionários
+        relatorio = []
+        for row in dados:
+            relatorio.append({
+                'id': row['id'],
+                'nome': row['nome'],
+                'estoque_anterior': row['estoque_anterior'],
+                'estoque_atual': row['estoque_atual']
+            })
+        
+        return relatorio
+    except Exception as e:
+        print(f"Erro ao gerar relatório de estoque: {str(e)}")
+        return []
+
+# Função para gerar o relatório de vendas
+def gerar_relatorio_vendas(data_inicio, data_fim):
+    db = get_db()
+    try:
+        cursor = db.execute(
+            """
+            SELECT 
+                p.nome AS produto,
+                SUM(iv.quantidade) AS quantidade,
+                SUM(iv.subtotal) AS subtotal,
+                SUM(iv.lucro) AS lucro,
+                v.data_venda
+            FROM itens_venda iv
+            JOIN produtos p ON iv.produto_id = p.id
+            JOIN vendas v ON iv.venda_id = v.id
+            WHERE v.data_venda BETWEEN ? AND ?
+            GROUP BY p.nome, v.data_venda
+            """,
+            (data_inicio, data_fim)
+        )
+        dados = cursor.fetchall()
+        
+        # Transformar os dados em uma lista de dicionários
+        relatorio = []
+        for row in dados:
+            relatorio.append({
+                'produto': row['produto'],
+                'quantidade': row['quantidade'],
+                'subtotal': row['subtotal'],
+                'lucro': row['lucro'],
+                'data_venda': row['data_venda']
+            })
+        
+        return relatorio
+    except Exception as e:
+        print(f"Erro ao gerar relatório de vendas: {str(e)}")
+        return []
+
 # Rota para a página inicial
 @app.route('/')
 def home():
@@ -133,11 +208,14 @@ def gerar_relatorio():
             data_inicio = (hoje - timedelta(days=30)).strftime('%Y-%m-%d 00:00:00')
             data_fim = hoje.strftime('%Y-%m-%d 23:59:59')
         
+        print(f"Gerando relatório {tipo_relatorio} para o período de {data_inicio} até {data_fim}")
+        
         if tipo_relatorio == 'vendas':
             dados = gerar_relatorio_vendas(data_inicio, data_fim)
-            df = pd.DataFrame(dados)
-            
-            if not df.empty:
+            print(f"Dados encontrados para vendas: {dados}")
+            # Criar DataFrame mesmo se não houver dados
+            if dados:
+                df = pd.DataFrame(dados)
                 df['data_venda'] = pd.to_datetime(df['data_venda']).dt.strftime('%d/%m/%Y %H:%M')
                 df = df.round(2)
                 
@@ -145,20 +223,22 @@ def gerar_relatorio():
                     'produto': 'TOTAL',
                     'quantidade': df['quantidade'].sum(),
                     'subtotal': df['subtotal'].sum(),
-                    'lucro': df['lucro'].sum()
+                    'lucro': df['lucro'].sum(),
+                    'data_venda': ''
                 }])
                 df = pd.concat([df, total_row], ignore_index=True)
+            else:
+                # Criar DataFrame vazio com as colunas corretas
+                df = pd.DataFrame(columns=['produto', 'quantidade', 'subtotal', 'lucro', 'data_venda'])
                 
         elif tipo_relatorio == 'estoque':
             dados = gerar_relatorio_estoque()
-            df = pd.DataFrame(dados)
-            
-            if not df.empty:
+            print(f"Dados encontrados para estoque: {dados}")
+            if dados:
+                df = pd.DataFrame(dados)
                 df = df.round(2)
-                df['valor_total_estoque'] = df['estoque_atual'] * df['valor_compra']
-        
-        if df.empty:
-            return jsonify({"success": False, "message": "Nenhum dado encontrado para o relatório."}), 404
+            else:
+                df = pd.DataFrame(columns=['id', 'nome', 'estoque_anterior', 'estoque_atual'])
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -187,7 +267,7 @@ def gerar_relatorio():
         
     except Exception as e:
         print(f"Erro ao gerar relatório: {str(e)}")
-        return jsonify({"success": False, "message": "Erro ao gerar relatório."}), 500
+        return jsonify({"success": False, "message": f"Erro ao gerar relatório: {str(e)}"}), 500
 
 # Rota para atualizar estoque
 @app.route('/atualizar_estoque', methods=['POST'])

@@ -30,6 +30,19 @@
         .btn {
             margin-right: 10px;
         }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
     </style>
 </head>
 <body>
@@ -56,6 +69,31 @@
                 <a href="{{ url_for('home') }}" class="btn btn-secondary">Voltar</a>
             </div>
         </form>
+
+        <!-- Tabela para exibir o relatório de estoque -->
+        {% if tipo_relatorio == 'estoque' %}
+        <h2>Relatório de Estoque</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Estoque Anterior</th>
+                    <th>Estoque Atual</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in relatorio %}
+                <tr>
+                    <td>{{ item.id }}</td>
+                    <td>{{ item.nome }}</td>
+                    <td>{{ item.estoque_anterior }}</td>
+                    <td>{{ item.estoque_atual }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
     </div>
 </body>
 </html>
