@@ -6,11 +6,10 @@ import pandas as pd
 from io import BytesIO
 from datetime import datetime, timedelta
 import json
-from database import get_db, close_db, init_db, gerar_relatorio_vendas, gerar_relatorio_estoque, adicionar_produto, buscar_produto, deletar_produto, obter_produtos_do_banco
+from flask_sqlalchemy import SQLAlchemy
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import io
-import sqlite3
 
 # Inicializa a aplicação Flask
 app = Flask(__name__)
@@ -27,12 +26,36 @@ if not os.path.exists(UPLOAD_FOLDER):
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
-# Inicializa o banco de dados
-with app.app_context():
-    init_db()
+# Configuração do SQLAlchemy
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL').replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-# Fecha a conexão com o banco de dados após cada requisição
-app.teardown_appcontext(close_db)
+# Definição dos modelos
+class Produto(db.Model):
+    __tablename__ = 'produtos'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    preco = db.Column(db.Float, nullable=False)
+    quantidade = db.Column(db.Integer, nullable=False)
+    valor_compra = db.Column(db.Float, nullable=False)
+    imagem = db.Column(db.String(100))
+
+class Venda(db.Model):
+    __tablename__ = 'vendas'
+    id = db.Column(db.Integer, primary_key=True)
+    cliente = db.Column(db.String(100), nullable=False)
+    data_venda = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+class ItemVenda(db.Model):
+    __tablename__ = 'itens_venda'
+    id = db.Column(db.Integer, primary_key=True)
+    venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id'), nullable=False)
+    produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id'), nullable=False)
+    quantidade = db.Column(db.Integer, nullable=False)
+    preco_unitario = db.Column(db.Float, nullable=False)
+    subtotal = db.Column(db.Float, nullable=False)
+    lucro = db.Column(db.Float, nullable=False)
 
 # Função para verificar se um arquivo é permitido
 def allowed_file(filename):
@@ -47,135 +70,88 @@ def save_image(file):
 
 # Função para atualizar um produto
 def atualizar_produto(produto_id, nome, preco, quantidade, valor_compra, imagem):
-    db = get_db()
-    try:
-        db.execute(
-            "UPDATE produtos SET nome = ?, preco = ?, quantidade = ?, valor_compra = ?, imagem = ? WHERE id = ?",
-            (nome, preco, quantidade, valor_compra, imagem, produto_id)
-        )
-        db.commit()
-        return buscar_produto(produto_id)
-    except Exception as e:
-        print(f"Erro ao atualizar produto: {str(e)}")
-        return None
+    produto = Produto.query.get(produto_id)
+    if produto:
+        produto.nome = nome
+        produto.preco = preco
+        produto.quantidade = quantidade
+        produto.valor_compra = valor_compra
+        produto.imagem = imagem
+        db.session.commit()
+        return produto
+    return None
 
 # Função para registrar uma venda no banco de dados
 def registrar_venda(cliente, itens_vendidos):
-    db = get_db()
     try:
-        # Inserir na tabela de vendas
-        cursor = db.execute(
-            "INSERT INTO vendas (cliente, data_venda) VALUES (?, datetime('now', 'localtime'))",
-            (cliente,)
-        )
-        venda_id = cursor.lastrowid
-        
-        # Inserir itens na tabela de itens_venda
+        venda = Venda(cliente=cliente)
+        db.session.add(venda)
+        db.session.flush()  # Para obter o ID da venda antes de commit
+
         for item in itens_vendidos:
             produto_id = item['produto_id']
             quantidade = item['quantidade']
             
-            # Buscar informações do produto
-            produto = buscar_produto(produto_id)
+            produto = Produto.query.get(produto_id)
             if not produto:
                 raise Exception(f"Produto com ID {produto_id} não encontrado")
             
-            preco_unitario = produto['preco']
-            valor_compra = produto['valor_compra']
+            preco_unitario = produto.preco
+            valor_compra = produto.valor_compra
             subtotal = preco_unitario * quantidade
             lucro = (preco_unitario - valor_compra) * quantidade
             
-            # Inserir item de venda
-            db.execute(
-                """
-                INSERT INTO itens_venda 
-                (venda_id, produto_id, quantidade, preco_unitario, subtotal, lucro) 
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (venda_id, produto_id, quantidade, preco_unitario, subtotal, lucro)
+            item_venda = ItemVenda(
+                venda_id=venda.id,
+                produto_id=produto_id,
+                quantidade=quantidade,
+                preco_unitario=preco_unitario,
+                subtotal=subtotal,
+                lucro=lucro
             )
+            db.session.add(item_venda)
         
-        db.commit()
-        return venda_id
+        db.session.commit()
+        return venda.id
     except Exception as e:
-        db.rollback()
+        db.session.rollback()
         print(f"Erro ao registrar venda: {str(e)}")
         raise e
 
 # Função para gerar o relatório de estoque
 def gerar_relatorio_estoque():
-    db = get_db()
-    try:
-        # Consulta para obter o estoque anterior (antes das vendas do dia)
-        hoje = datetime.now().strftime('%Y-%m-%d')
-        cursor = db.execute(
-            """
-            SELECT 
-                p.id,
-                p.nome,
-                p.quantidade AS estoque_atual,
-                (p.quantidade + IFNULL(SUM(iv.quantidade), 0)) AS estoque_anterior
-            FROM produtos p
-            LEFT JOIN itens_venda iv ON p.id = iv.produto_id
-            LEFT JOIN vendas v ON iv.venda_id = v.id AND DATE(v.data_venda) = ?
-            GROUP BY p.id
-            """,
-            (hoje,)
+    hoje = datetime.now().strftime('%Y-%m-%d')
+    produtos = Produto.query.all()
+    relatorio = []
+    for produto in produtos:
+        estoque_anterior = produto.quantidade + sum(
+            item.quantidade for item in ItemVenda.query.join(Venda).filter(
+                ItemVenda.produto_id == produto.id,
+                Venda.data_venda >= hoje
+            ).all()
         )
-        dados = cursor.fetchall()
-        
-        # Transformar os dados em uma lista de dicionários
-        relatorio = []
-        for row in dados:
-            relatorio.append({
-                'id': row['id'],
-                'nome': row['nome'],
-                'estoque_anterior': row['estoque_anterior'],
-                'estoque_atual': row['estoque_atual']
-            })
-        
-        return relatorio
-    except Exception as e:
-        print(f"Erro ao gerar relatório de estoque: {str(e)}")
-        return []
+        relatorio.append({
+            'id': produto.id,
+            'nome': produto.nome,
+            'estoque_anterior': estoque_anterior,
+            'estoque_atual': produto.quantidade
+        })
+    return relatorio
 
 # Função para gerar o relatório de vendas
 def gerar_relatorio_vendas(data_inicio, data_fim):
-    db = get_db()
-    try:
-        cursor = db.execute(
-            """
-            SELECT 
-                p.nome AS produto,
-                SUM(iv.quantidade) AS quantidade,
-                SUM(iv.subtotal) AS subtotal,
-                SUM(iv.lucro) AS lucro,
-                v.data_venda
-            FROM itens_venda iv
-            JOIN produtos p ON iv.produto_id = p.id
-            JOIN vendas v ON iv.venda_id = v.id
-            WHERE v.data_venda BETWEEN ? AND ?
-            GROUP BY p.nome, v.data_venda
-            """,
-            (data_inicio, data_fim)
-        )
-        dados = cursor.fetchall()
-        
-        # Transformar os dados em uma lista de dicionários
-        relatorio = []
-        for row in dados:
+    vendas = Venda.query.filter(Venda.data_venda.between(data_inicio, data_fim)).all()
+    relatorio = []
+    for venda in vendas:
+        for item in venda.itens_venda:
             relatorio.append({
-                'produto': row['produto'],
-                'quantidade': row['quantidade'],
-                'subtotal': row['subtotal'],
-                'lucro': row['lucro'],
-                'data_venda': row['data_venda']
+                'produto': item.produto.nome,
+                'quantidade': item.quantidade,
+                'subtotal': item.subtotal,
+                'lucro': item.lucro,
+                'data_venda': venda.data_venda.strftime('%Y-%m-%d %H:%M:%S')
             })
-        
-        return relatorio
-    except Exception as e:
-        print(f"Erro ao gerar relatório de vendas: {str(e)}")
-        return []
+    return relatorio
 
 # Rota para a página inicial
 @app.route('/')
@@ -213,7 +189,6 @@ def gerar_relatorio():
         if tipo_relatorio == 'vendas':
             dados = gerar_relatorio_vendas(data_inicio, data_fim)
             print(f"Dados encontrados para vendas: {dados}")
-            # Criar DataFrame mesmo se não houver dados
             if dados:
                 df = pd.DataFrame(dados)
                 df['data_venda'] = pd.to_datetime(df['data_venda']).dt.strftime('%d/%m/%Y %H:%M')
@@ -228,7 +203,6 @@ def gerar_relatorio():
                 }])
                 df = pd.concat([df, total_row], ignore_index=True)
             else:
-                # Criar DataFrame vazio com as colunas corretas
                 df = pd.DataFrame(columns=['produto', 'quantidade', 'subtotal', 'lucro', 'data_venda'])
                 
         elif tipo_relatorio == 'estoque':
@@ -273,22 +247,15 @@ def gerar_relatorio():
 @app.route('/atualizar_estoque', methods=['POST'])
 def atualizar_estoque():
     try:
-        db = get_db()
         for key, value in request.form.items():
             if key.startswith('quantidade_'):
                 produto_id = int(key.split('_')[1])
                 nova_quantidade = int(value)
                 
-                produto = buscar_produto(produto_id)
+                produto = Produto.query.get(produto_id)
                 if produto:
-                    atualizar_produto(
-                        produto_id=produto_id,
-                        nome=produto['nome'],
-                        preco=produto['preco'],
-                        quantidade=nova_quantidade,
-                        valor_compra=produto['valor_compra'],
-                        imagem=produto['imagem']
-                    )
+                    produto.quantidade = nova_quantidade
+                    db.session.commit()
         
         flash('Estoque atualizado com sucesso!', 'success')
     except Exception as e:
@@ -328,13 +295,15 @@ def cadastrar_produto():
                     flash("Tipo de arquivo não permitido.", "error")
                     return redirect(url_for('cadastrar_produto'))
 
-            produto = adicionar_produto(
+            produto = Produto(
                 nome=nome,
                 preco=preco,
                 quantidade=quantidade,
                 valor_compra=valor_compra,
                 imagem=imagem
             )
+            db.session.add(produto)
+            db.session.commit()
             flash("Produto cadastrado com sucesso!", "success")
             return redirect(url_for('estoque'))
         except Exception as e:
@@ -346,7 +315,7 @@ def cadastrar_produto():
 # Rota para a página de estoque
 @app.route('/estoque')
 def estoque():
-    produtos = obter_produtos_do_banco()
+    produtos = Produto.query.all()
     messages = get_flashed_messages(with_categories=True)
     return render_template('estoque.html', produtos=produtos, messages=messages)
 
@@ -354,7 +323,10 @@ def estoque():
 @app.route('/deletar-produto/<int:produto_id>', methods=['POST'])
 def deletar_produto_route(produto_id):
     try:
-        if deletar_produto(produto_id):
+        produto = Produto.query.get(produto_id)
+        if produto:
+            db.session.delete(produto)
+            db.session.commit()
             flash("Produto removido com sucesso!", "success")
         else:
             flash("Produto não encontrado.", "error")
@@ -367,7 +339,7 @@ def deletar_produto_route(produto_id):
 # Rota para a página de vendas
 @app.route('/vendas')
 def vendas():
-    produtos = obter_produtos_do_banco()
+    produtos = Produto.query.all()
     messages = get_flashed_messages(with_categories=True)
     return render_template('vendas.html', produtos=produtos, messages=messages)
 
@@ -390,12 +362,12 @@ def finalizar_venda():
             produto_id = item.get('produto_id')
             quantidade_vendida = item.get('quantidade')
 
-            produto = buscar_produto(produto_id)
+            produto = Produto.query.get(produto_id)
             if not produto:
                 return jsonify({"success": False, "message": f"Produto com ID {produto_id} não encontrado."}), 404
 
-            if produto['quantidade'] < quantidade_vendida:
-                return jsonify({"success": False, "message": f"Estoque insuficiente para o produto {produto['nome']}."}), 400
+            if produto.quantidade < quantidade_vendida:
+                return jsonify({"success": False, "message": f"Estoque insuficiente para o produto {produto.nome}."}), 400
 
         # Registrar a venda no banco de dados
         try:
@@ -408,17 +380,9 @@ def finalizar_venda():
             produto_id = item.get('produto_id')
             quantidade_vendida = item.get('quantidade')
 
-            produto = buscar_produto(produto_id)
-            nova_quantidade = produto['quantidade'] - quantidade_vendida
-            
-            atualizar_produto(
-                produto_id=produto_id,
-                nome=produto['nome'],
-                preco=produto['preco'],
-                quantidade=nova_quantidade,
-                valor_compra=produto['valor_compra'],
-                imagem=produto['imagem']
-            )
+            produto = Produto.query.get(produto_id)
+            produto.quantidade -= quantidade_vendida
+            db.session.commit()
 
         return jsonify({
             "success": True, 
@@ -444,13 +408,28 @@ def static_files(filename):
 # Rotas da API REST
 @app.route('/api/produtos', methods=['GET'])
 def get_produtos():
-    return jsonify(obter_produtos_do_banco())
+    produtos = Produto.query.all()
+    return jsonify([{
+        'id': produto.id,
+        'nome': produto.nome,
+        'preco': produto.preco,
+        'quantidade': produto.quantidade,
+        'valor_compra': produto.valor_compra,
+        'imagem': produto.imagem
+    } for produto in produtos])
 
 @app.route('/api/produtos/<int:produto_id>', methods=['GET'])
 def get_produto(produto_id):
-    produto = buscar_produto(produto_id)
+    produto = Produto.query.get(produto_id)
     if produto:
-        return jsonify(produto)
+        return jsonify({
+            'id': produto.id,
+            'nome': produto.nome,
+            'preco': produto.preco,
+            'quantidade': produto.quantidade,
+            'valor_compra': produto.valor_compra,
+            'imagem': produto.imagem
+        })
     return jsonify({"erro": "Produto não encontrado"}), 404
 
 @app.route('/api/produtos', methods=['POST'])
@@ -468,18 +447,24 @@ def post_produto():
         except ValueError as e:
             return jsonify({"erro": "Valores inválidos fornecidos"}), 400
 
-        produto = adicionar_produto(
+        produto = Produto(
             nome=nome,
             preco=preco,
             quantidade=quantidade,
             valor_compra=valor_compra,
             imagem=dados.get('imagem')
         )
+        db.session.add(produto)
+        db.session.commit()
 
-        if produto:
-            return jsonify(produto), 201
-        else:
-            return jsonify({"erro": "Erro ao adicionar produto"}), 500
+        return jsonify({
+            'id': produto.id,
+            'nome': produto.nome,
+            'preco': produto.preco,
+            'quantidade': produto.quantidade,
+            'valor_compra': produto.valor_compra,
+            'imagem': produto.imagem
+        }), 201
 
     except Exception as e:
         print(f"Erro ao adicionar produto via API: {str(e)}")
@@ -491,29 +476,26 @@ def put_produto(produto_id):
     try:
         dados = request.get_json()
 
-        produto = buscar_produto(produto_id)
+        produto = Produto.query.get(produto_id)
         if not produto:
             return jsonify({"erro": "Produto não encontrado"}), 404
 
-        nome = dados.get('nome', produto['nome'])
-        preco = float(dados.get('preco', produto['preco']))
-        valor_compra = float(dados.get('valor_compra', produto['valor_compra']))
-        quantidade = int(dados.get('quantidade', produto['quantidade']))
-        imagem = dados.get('imagem', produto['imagem'])
+        produto.nome = dados.get('nome', produto.nome)
+        produto.preco = float(dados.get('preco', produto.preco))
+        produto.valor_compra = float(dados.get('valor_compra', produto.valor_compra))
+        produto.quantidade = int(dados.get('quantidade', produto.quantidade))
+        produto.imagem = dados.get('imagem', produto.imagem)
 
-        produto_atualizado = atualizar_produto(
-            produto_id=produto_id,
-            nome=nome,
-            preco=preco,
-            quantidade=quantidade,
-            valor_compra=valor_compra,
-            imagem=imagem
-        )
+        db.session.commit()
 
-        if produto_atualizado:
-            return jsonify(produto_atualizado), 200
-        else:
-            return jsonify({"erro": "Erro ao atualizar produto"}), 500
+        return jsonify({
+            'id': produto.id,
+            'nome': produto.nome,
+            'preco': produto.preco,
+            'quantidade': produto.quantidade,
+            'valor_compra': produto.valor_compra,
+            'imagem': produto.imagem
+        }), 200
 
     except Exception as e:
         print(f"Erro ao atualizar produto via API: {str(e)}")
@@ -523,7 +505,10 @@ def put_produto(produto_id):
 @app.route('/api/produtos/<int:produto_id>', methods=['DELETE'])
 def delete_produto_api(produto_id):
     try:
-        if deletar_produto(produto_id):
+        produto = Produto.query.get(produto_id)
+        if produto:
+            db.session.delete(produto)
+            db.session.commit()
             return jsonify({"mensagem": "Produto deletado com sucesso"}), 200
         else:
             return jsonify({"erro": "Produto não encontrado"}), 404
@@ -533,4 +518,6 @@ def delete_produto_api(produto_id):
 
 # Inicializa o servidor Flask
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()  # Cria as tabelas no banco de dados se não existirem
     app.run(debug=True)
